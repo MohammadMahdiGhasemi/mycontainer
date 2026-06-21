@@ -217,4 +217,4 @@ sudo debootstrap --variant=minbase bookworm rootfs
 sudo debootstrap --variant=minbase --include=apt-transport-https,ca-certificates \
     bookworm rootfs
 ```
-
+.
