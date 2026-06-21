@@ -1,0 +1,121 @@
+#!/bin/bash
+#
+# mycontainer - Lightweight Linux container runtime (CLI entry point)
+#
+# Demonstrates how Linux containers work without Docker, using:
+#   - unshare() for namespace isolation
+#   - overlayfs for copy-on-write filesystems
+#   - chroot for filesystem jail
+#
+# Usage:
+#   mycontainer run <name>              Create and start a container
+#   mycontainer exec <name> [cmd]       Execute a command inside a running container
+#   mycontainer stop <name>             Stop and remove a container
+#   mycontainer list                    List all containers
+#   mycontainer help                    Show help
+#
+set -euo pipefail
+
+BASE="$(cd "$(dirname "$0")" && pwd)"
+RUN_SCRIPT="$BASE/containerd/run.sh"
+EXEC_SCRIPT="$BASE/containerd/exec.sh"
+STOP_SCRIPT="$BASE/containerd/stop.sh"
+STATE_DIR="$BASE/state/containers"
+
+chmod +x "$RUN_SCRIPT" "$EXEC_SCRIPT" "$STOP_SCRIPT" 2>/dev/null || true
+
+show_help() {
+    cat <<'HELP'
+mycontainer - Lightweight Linux container runtime
+
+Demonstrates how Linux containers work without Docker, using kernel
+features: namespaces, overlayfs, chroot, and cgroups.
+
+COMMANDS:
+  mycontainer run <name>              Create and start a new container
+  mycontainer exec <name> [command]   Execute a command in a running container
+  mycontainer stop <name>             Stop a container and clean up
+  mycontainer list                    List all containers
+  mycontainer help                    Show this help
+
+EXAMPLES:
+  mycontainer run mybox               Start interactive shell in 'mybox'
+  mycontainer exec mybox ls /         List files in 'mybox' root
+  mycontainer exec mybox bash         Attach new shell to 'mybox' filesystem
+  mycontainer stop mybox              Stop and remove 'mybox'
+
+HOW IT WORKS:
+  1. unshare() creates isolated namespaces (PID, mount, UTS, IPC, NET)
+  2. overlayfs layers a writable layer on top of a read-only base rootfs
+  3. chroot jails the process to the merged overlay filesystem
+  4. Each container sees only its own processes, hostname, network, etc.
+
+NOTES:
+  - Runs without sudo using user namespaces (--user --map-root-user)
+  - Container changes are stored in state/containers/<name>/upper/
+  - To reset a container, stop it (removes all changes)
+  - To create a fresh rootfs: sudo debootstrap --variant=minbase bookworm rootfs/
+HELP
+}
+
+list_containers() {
+    echo "CONTAINER STATUS"
+    echo "================"
+
+    if [ ! -d "$STATE_DIR" ] || [ -z "$(ls -A "$STATE_DIR" 2>/dev/null)" ]; then
+        echo "  (no containers)"
+        return
+    fi
+
+    for dir in "$STATE_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        c_name=$(basename "$dir")
+        PID_FILE="$dir/pid"
+
+        if [ -f "$PID_FILE" ]; then
+            c_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+            if [ -n "$c_pid" ] && kill -0 "$c_pid" 2>/dev/null; then
+                printf "  %-20s RUNNING (PID %s)\n" "$c_name" "$c_pid"
+            else
+                printf "  %-20s STOPPED (stale PID file)\n" "$c_name"
+            fi
+        else
+            printf "  %-20s STOPPED\n" "$c_name"
+        fi
+    done
+}
+
+case "${1:-help}" in
+    run)
+        if [ -z "${2:-}" ]; then
+            echo "Usage: mycontainer run <name>" >&2
+            exit 1
+        fi
+        bash "$RUN_SCRIPT" "$2"
+        ;;
+    exec)
+        if [ -z "${2:-}" ]; then
+            echo "Usage: mycontainer exec <name> [command]" >&2
+            exit 1
+        fi
+        bash "$EXEC_SCRIPT" "$2" "${3:-/bin/bash}"
+        ;;
+    stop)
+        if [ -z "${2:-}" ]; then
+            echo "Usage: mycontainer stop <name>" >&2
+            exit 1
+        fi
+        bash "$STOP_SCRIPT" "$2"
+        ;;
+    list|ls)
+        list_containers
+        ;;
+    help|--help|-h|"")
+        show_help
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        echo "Run 'mycontainer help' for usage" >&2
+        exit 1
+        ;;
+esac
