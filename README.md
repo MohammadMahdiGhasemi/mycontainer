@@ -218,24 +218,3 @@ sudo debootstrap --variant=minbase --include=apt-transport-https,ca-certificates
     bookworm rootfs
 ```
 
-## For Your Presentation
-
-Key talking points:
-
-1. **"Containers are not VMs"** — they share the host kernel, using namespaces for isolation and cgroups for resource limits.
-
-2. **"Namespaces are the core technology"** — PID, mount, UTS, IPC, and network namespaces each isolate a different aspect of the system.
-
-3. **"Rootless containers use user namespaces"** — `--user --map-root-user` gives you root inside without real root. This is how Docker and Podman run rootless.
-
-4. **"OverlayFS enables copy-on-write"** — the container's writable layer sits on top of a read-only base image, just like Docker layers.
-
-5. **"chroot is the oldest isolation"** — changing the root directory dates back to Unix V7 (1979). Modern containers combine chroot with namespaces.
-
-6. **"cgroups control resources"** — CPU and memory limits prevent one container from starving others.
-
-7. **"All of this is in ~400 lines of Bash"** — the same kernel features that power Docker are accessible to anyone.
-
-## License
-
-MIT
